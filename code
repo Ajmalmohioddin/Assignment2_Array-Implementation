@@ -1,0 +1,150 @@
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <fstream>
+#include <filesystem>
+#include <vector>
+
+// Define a macro for circular right shift
+#define ROTR(x, n) ((x >> n) | (x << (32 - n)))
+
+// Define bitwise operations used in SHA-256 algorithm
+#define CH(x, y, z) ((x & y) ^ (~x & z))
+#define MAJ(x, y, z) ((x & y) ^ (x & z) ^ (y & z))
+#define SIGMA0(x) (ROTR(x, 2) ^ ROTR(x, 13) ^ ROTR(x, 22))
+#define SIGMA1(x) (ROTR(x, 6) ^ ROTR(x, 11) ^ ROTR(x, 25))
+#define sigma0(x) (ROTR(x, 7) ^ ROTR(x, 18) ^ (x >> 3))
+#define sigma1(x) (ROTR(x, 17) ^ ROTR(x, 19) ^ (x >> 10))
+
+class SHA256 {
+public:
+    std::string hash(const std::string& message);
+
+private:
+    // Constants used in SHA-256 algorithm
+    static const uint32_t K[64];
+    // Initial hash values
+    uint32_t h[8];
+    // Function to obtain the final hash result
+    std::string getResult();
+    // Function to process each 512-bit block of the message
+    void processBlock(const std::vector<uint8_t>& block);
+};
+
+// Constants for SHA-256 algorithm
+const uint32_t SHA256::K[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+    // ... (remaining constants)
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+std::string SHA256::hash(const std::string& message) {
+    // Initialize hash values
+    h[0] = 0x6a09e667;
+    h[1] = 0xbb67ae85;
+    h[2] = 0x3c6ef372;
+    h[3] = 0xa54ff53a;
+    h[4] = 0x510e527f;
+    h[5] = 0x9b05688c;
+    h[6] = 0x1f83d9ab;
+    h[7] = 0x5be0cd19;
+
+    // Prepare the padded message
+    std::vector<uint8_t> paddedMessage(message.begin(), message.end());
+    paddedMessage.push_back(0x80);
+
+    size_t originalLength = message.length() * 8;
+    while ((paddedMessage.size() * 8) % 512 != 448) {
+        paddedMessage.push_back(0x00);
+    }
+
+    for (int i = 0; i < 8; ++i) {
+        paddedMessage.push_back((originalLength >> (56 - 8 * i)) & 0xFF);
+    }
+
+    // Process each 512-bit block of the padded message
+    for (size_t i = 0; i < paddedMessage.size(); i += 64) {
+        processBlock(std::vector<uint8_t>(paddedMessage.begin() + i, paddedMessage.begin() + i + 64));
+    }
+
+    // Obtain the final hash result
+    return getResult();
+}
+
+void SHA256::processBlock(const std::vector<uint8_t>& block) {
+    // Initialize array to hold 32-bit words
+    std::vector<uint32_t> words(64, 0);
+
+    // Convert 64 bytes of the block into 16 words
+    for (size_t i = 0; i < 16; ++i) {
+        words[i] = (block[i * 4] << 24) | (block[i * 4 + 1] << 16) | (block[i * 4 + 2] << 8) | block[i * 4 + 3];
+    }
+
+    // Extend the first 16 words into the remaining 48 words
+    for (size_t i = 16; i < 64; ++i) {
+        words[i] = sigma1(words[i - 2]) + words[i - 7] + sigma0(words[i - 15]) + words[i - 16];
+    }
+
+    // Initialize temporary variables
+    uint32_t a = h[0];
+    uint32_t b = h[1];
+    uint32_t c = h[2];
+    uint32_t d = h[3];
+    uint32_t e = h[4];
+    uint32_t f = h[5];
+    uint32_t g = h[6];
+    uint32_t hh = h[7];
+
+    // Main loop for 64 iterations
+    for (size_t i = 0; i < 64; ++i) {
+        uint32_t temp1 = hh + SIGMA1(e) + CH(e, f, g) + K[i] + words[i];
+        uint32_t temp2 = SIGMA0(a) + MAJ(a, b, c);
+        hh = g;
+        g = f;
+        f = e;
+        e = d + temp1;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2;
+    }
+
+    // Update hash values
+    h[0] += a;
+    h[1] += b;
+    h[2] += c;
+    h[3] += d;
+    h[4] += e;
+    h[5] += f;
+    h[6] += g;
+    h[7] += hh;
+}
+
+std::string SHA256::getResult() {
+    // Convert hash values to hexadecimal and concatenate
+    std::stringstream ss;
+    for (int i = 0; i < 8; ++i) {
+        ss << std::hex << std::setfill('0') << std::setw(8) << h[i];
+    }
+    return ss.str();
+}
+
+int main() {
+    // Create an instance of SHA256
+    SHA256 sha256;
+
+    // Prompt user to enter the input message
+    std::cout << "Enter the input message: ";
+
+    // Read the complete input from stdin
+    std::istreambuf_iterator<char> begin(std::cin), end;
+    std::string message(begin, end);
+
+    // Compute the SHA-256 hash of the input message
+    std::string hash = sha256.hash(message);
+
+    // Display the SHA-256 hash
+    std::cout << "\nSHA-256 Hash: " << hash << std::endl;
+
+    return 0;
+}
